@@ -12,3 +12,4 @@ yellowbrick
 pyarrow
 openpyxl
 streamlit
+streamlit
