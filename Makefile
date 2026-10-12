@@ -1,4 +1,4 @@
-.PHONY: data features train evaluate clean
+.PHONY: data features segments train evaluate dashboard clean
 
 data:
 	python src/data/load_db.py
@@ -7,8 +7,15 @@ data:
 features:
 	python src/features.py
 
+segments:
+	python -m src.segmentation
+
 train:
-	python src/model.py
+	python -m src.model
+
+dashboard:
+	python -m src.dashboard_data
+	streamlit run app.py
 
 evaluate:
 	python src/evaluate.py
