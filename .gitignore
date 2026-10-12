@@ -9,6 +9,8 @@ data/interim/*
 !data/raw/.gitkeep
 !data/interim/.gitkeep
 !data/processed/.gitkeep
+data/processed/*.parquet
+data/processed/*.csv
 models/*.joblib
 models/*.pkl
 *.pbix
