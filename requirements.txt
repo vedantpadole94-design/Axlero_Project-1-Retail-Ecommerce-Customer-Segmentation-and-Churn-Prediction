@@ -11,3 +11,4 @@ jupyter
 yellowbrick
 pyarrow
 openpyxl
+streamlit
