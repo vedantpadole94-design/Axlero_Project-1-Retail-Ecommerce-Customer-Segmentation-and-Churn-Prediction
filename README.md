@@ -105,9 +105,11 @@ export DATABASE_URL="postgresql+psycopg2://localhost:5432/axlero_retail"
 
 ## Outputs
 
-The pipeline writes generated data and model files locally; these customer-level
-artifacts are excluded from Git.
+The four core Parquet files below are included in Git so the segmentation,
+modeling, and dashboard workflows have their expected inputs. Regenerate them
+when refreshing the data. Other generated data and model files remain local.
 
+- `data/interim/users_raw.parquet` — customer-level data summary
 - `data/interim/rfm.parquet` — RFM features
 - `data/processed/rfm_segments.parquet` — customers with four segment labels
 - `data/processed/customers_scored.parquet` — churn scores and predictions
