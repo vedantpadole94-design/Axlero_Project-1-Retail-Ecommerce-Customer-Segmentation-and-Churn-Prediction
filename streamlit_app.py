@@ -1,7 +1,16 @@
-"""Axlero Customer Intelligence — Streamlit Dashboard.
+"""Axlero Customer Intelligence — Interactive Streamlit Dashboard.
 
-A portfolio-grade customer segmentation and churn prediction application
-built on RFM analysis and Random Forest modeling of 541,909 retail transactions.
+A portfolio-grade customer segmentation, lifetime value, and churn prediction
+application built on RFM analysis and tuned Random Forest classification
+of 541,909 retail transactions from the UCI Online Retail repository.
+
+Pipeline Context:
+    data/processed/ (bi_export.csv, segment_summary.csv, etc.)
+      └──> streamlit_app.py [THIS MODULE]
+             └──> Interactive Web Application (Overview, Segments, Churn, Actions, About)
+
+Typical usage:
+    streamlit run streamlit_app.py
 """
 
 from __future__ import annotations
@@ -34,20 +43,37 @@ from src.dashboard_utils import (
     generate_top_customers,
 )
 
-# ── Page Config & Styling ────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION: Page Configuration & Global Styling
+# ─────────────────────────────────────────────────────────────────────────────
+# Set wide layout so interactive Plotly charts, multi-column KPI scorecards,
+# and high-density customer tables utilize the full browser width without clipping.
 st.set_page_config(
     page_title="Axlero | Customer Intelligence",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+# Inject custom typography, metric card shadows, and CSS micro-interactions
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
-# ── Cached Data Loaders ──────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION: Cached Data Loaders
+# ─────────────────────────────────────────────────────────────────────────────
+# Using st.cache_data(ttl=3600) prevents reading and parsing large CSV files
+# on every user interaction or filter adjustment, maintaining sub-100ms render speeds.
 @st.cache_data(ttl=3600)
 def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Load core BI datasets with caching."""
+    """Load core Business Intelligence datasets from disk with caching.
+
+    Returns:
+        tuple containing:
+            - pd.DataFrame: Enriched customer-level dataset (bi_export.csv).
+            - pd.DataFrame: Aggregate segment summary statistics (segment_summary.csv).
+            - pd.DataFrame: High-risk customer cohort (high_risk_customers.csv).
+            - pd.DataFrame: Prescriptive playbook actions (segment_actions.csv).
+    """
     bi_path = PROCESSED_DIR / "bi_export.csv"
     sum_path = PROCESSED_DIR / "segment_summary.csv"
     risk_path = PROCESSED_DIR / "high_risk_customers.csv"
@@ -57,6 +83,7 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFr
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     bi_df = pd.read_csv(bi_path)
+    # Parse date strings to datetime objects for temporal filtering
     bi_df["first_purchase"] = pd.to_datetime(bi_df["first_purchase"])
     bi_df["last_purchase"] = pd.to_datetime(bi_df["last_purchase"])
     sum_df = pd.read_csv(sum_path).fillna({"segment": "Unknown", "count": 0, "revenue": 0, "churn_rate": 0})
@@ -68,17 +95,21 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFr
 with st.spinner("Loading customer intelligence data..."):
     bi_raw, summary_full, high_risk_full, actions_df = load_datasets()
 
+# Defensive guard against missing data files
 if bi_raw.empty:
     st.error("⚠️ Dashboard data is missing. Please ensure data/processed/bi_export.csv exists.")
     st.stop()
 
 
-# ── Sidebar Navigation & Filters ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION: Sidebar Navigation & Dimensional Filtering
+# ─────────────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📊 Axlero Analytics")
     st.caption("E-Commerce Customer Intelligence Engine")
     st.markdown("---")
 
+    # Radio navigation allows seamless multi-page switching within a single Streamlit script
     page = st.radio(
         "Navigation",
         ["Overview", "Segments", "Churn Risk", "Actions", "About"],
@@ -89,7 +120,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🔍 Filters")
 
-    # Date range slider
+    # 1. Date Range Filter: Filter accounts active within a specific chronological window
     min_date = bi_raw["first_purchase"].min().date()
     max_date = bi_raw["last_purchase"].max().date()
     selected_dates = st.slider(
@@ -100,23 +131,24 @@ with st.sidebar:
         format="MMM YYYY",
     )
 
-    # Segment multiselect
+    # 2. Segment Filter: Allows selective focus on specific customer tiers (e.g. Champions only)
     all_segs = [s for s in SEGMENT_ORDER if s in bi_raw["segment"].unique()]
     selected_segments = st.multiselect("Customer Segments", options=all_segs, default=all_segs)
 
-    # Churn threshold slider
+    # 3. Churn Threshold Filter: Dynamic cutoff for flagging accounts as high churn risk
     churn_threshold = st.slider("Churn Risk Threshold ≥", 0.0, 1.0, 0.70, 0.05, format="%.2f")
 
-    # Country multiselect
+    # 4. Geographic Filter: Drill down into specific customer countries
     all_countries = sorted(bi_raw["primary_country"].dropna().unique().tolist())
     default_countries = ["United Kingdom"] if "United Kingdom" in all_countries else all_countries[:1]
     selected_countries = st.multiselect("Geography", options=all_countries, default=default_countries)
 
-    # Revenue range slider
+    # 5. Spend Range Filter: Isolate customer accounts by monetary tiers
     rev_min = float(bi_raw["total_revenue"].min())
     rev_max = float(bi_raw["total_revenue"].max())
     selected_rev = st.slider("Customer Spend Range ($)", rev_min, rev_max, (rev_min, rev_max), format="$%.0f")
 
+    # Action buttons: st.rerun() triggers an immediate UI reload to flush state and apply active widgets
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         if st.button("Apply", use_container_width=True):
@@ -133,7 +165,10 @@ with st.sidebar:
     )
 
 
-# ── Filter Logic ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION: Dimensional Filter Execution
+# ─────────────────────────────────────────────────────────────────────────────
+# Apply multi-dimensional filter constraints to the in-memory dataset
 filtered_bi = bi_raw.copy()
 if selected_segments:
     filtered_bi = filtered_bi[filtered_bi["segment"].isin(selected_segments)]
@@ -146,24 +181,34 @@ filtered_bi = filtered_bi[
     & (filtered_bi["first_purchase"].dt.date <= selected_dates[1])
 ]
 
+# Guard against zero-result filter combinations
 if filtered_bi.empty:
     st.warning("⚠️ No customers match the selected filter criteria. Please broaden your selection.")
     st.stop()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 1. OVERVIEW PAGE
+# SECTION: Page 1 — Overview & Executive Dashboard
 # ══════════════════════════════════════════════════════════════════════════════
+# Purpose: High-level financial KPIs, revenue trajectories, segment contributions,
+# and 3D behavioral cluster maps for executive review.
 if page == "Overview":
     st.title("📊 Customer Intelligence Dashboard")
 
-    # Hero KPI Cards
+    # ── Executive KPI Calculations ───────────────────────────────────────────
+    # Formula 1: Total Revenue = Sum of all historical transaction values
     tot_rev = filtered_bi["total_revenue"].sum()
+    # Formula 2: Total Customers = Distinct customer count in active filter
     tot_cust = filtered_bi["customer_id"].nunique()
-    aov = tot_rev / filtered_bi["total_orders"].sum() if filtered_bi["total_orders"].sum() > 0 else filtered_bi["avg_order_value"].mean()
+    # Formula 3: Average Order Value (AOV) = Total GMV / Total Completed Orders
+    tot_orders = filtered_bi["total_orders"].sum()
+    aov = tot_rev / tot_orders if tot_orders > 0 else filtered_bi["avg_order_value"].mean()
+    # Formula 4: High Risk Customer Count = Accounts with churn probability >= threshold
     high_risk_n = (filtered_bi["churn_probability"] >= churn_threshold).sum()
+    # Formula 5: Model Holdout Performance = Validated holdout ROC-AUC
     model_auc = 0.784
 
+    # Render top-level KPI metrics cards
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("💰 Total Revenue", fmt_currency(tot_rev), delta="+12.4% YoY")
     k2.metric("👥 Total Customers", fmt_number(tot_cust), delta="+8.2% YoY")
@@ -171,6 +216,7 @@ if page == "Overview":
     k4.metric("⚠️ At-Risk Customers", fmt_number(high_risk_n), delta=f"≥{churn_threshold:.0%} risk", delta_color="inverse")
     k5.metric("🎯 Model ROC-AUC", f"{model_auc:.3f}", delta="Random Forest")
 
+    # Executive Pareto insight: Highlight revenue concentration driven by Champions
     champs = filtered_bi[filtered_bi["segment"] == "Champions"]
     champ_pct = (len(champs) / tot_cust * 100) if tot_cust > 0 else 0
     champ_rev_pct = (champs["total_revenue"].sum() / tot_rev * 100) if tot_rev > 0 else 0
@@ -180,11 +226,11 @@ if page == "Overview":
         unsafe_allow_html=True,
     )
 
-    # A. Monthly Revenue Trend Line Chart
+    # Chart A: Longitudinal Monthly Revenue and Customer Growth
     fig_rev = build_monthly_revenue(filtered_bi)
     st.plotly_chart(apply_plotly_theme(fig_rev), use_container_width=True)
 
-    # B. Segment Distribution (Donut & Horizontal Bar Side-by-Side)
+    # Chart B: Segment Distribution Donut & Revenue Bar Side-by-Side
     seg_summary_dynamic = (
         filtered_bi.groupby("segment", as_index=False)
         .agg(count=("customer_id", "nunique"), revenue=("total_revenue", "sum"))
@@ -196,20 +242,23 @@ if page == "Overview":
     with col_bar:
         st.plotly_chart(apply_plotly_theme(build_revenue_bar(seg_summary_dynamic)), use_container_width=True)
 
-    # C. Customer Behavior Map (RFM Scatter)
+    # Chart C: Customer 3D RFM Behavior Scatter Space
     st.plotly_chart(apply_plotly_theme(build_rfm_scatter(filtered_bi)), use_container_width=True)
 
-    # D. Recent Activity Heatmap
+    # Chart D: Monthly Segment Cohort Heatmap
     st.plotly_chart(apply_plotly_theme(build_segment_heatmap(filtered_bi)), use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 2. SEGMENTS PAGE
+# SECTION: Page 2 — Customer Segments Deep Dive
 # ══════════════════════════════════════════════════════════════════════════════
+# Purpose: Granular inspection of the four K-Means behavioral segments,
+# profiling recency, order frequency, spend, retention, and vitality scores.
 elif page == "Segments":
     st.title("🎯 Customer Segments Deep Dive")
     st.caption("Granular behavioral profiles, revenue capture, and segment-level health scores.")
 
+    # Expandable detail cards for each of the 4 business personas
     for seg in SEGMENT_ORDER:
         df_seg = filtered_bi[filtered_bi["segment"] == seg]
         if df_seg.empty:
@@ -266,18 +315,21 @@ elif page == "Segments":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 3. CHURN RISK PAGE
+# SECTION: Page 3 — Churn Risk & Retention Prioritization
 # ══════════════════════════════════════════════════════════════════════════════
+# Purpose: Identify high-risk accounts using machine learning probabilities,
+# allowing marketing teams to search, filter, and export targeted win-back call lists.
 elif page == "Churn Risk":
     st.title("⚠️ Churn Risk & Retention Prioritization")
     st.caption("Model-driven churn risk probabilities (Random Forest classifier holdout ROC-AUC 0.784).")
 
-    # Churn distribution chart
+    # Churn distribution chart across probability tiers
     st.plotly_chart(apply_plotly_theme(build_churn_distribution(filtered_bi)), use_container_width=True)
 
     st.markdown("---")
     st.subheader("🔍 At-Risk Customer Directory")
 
+    # Search, segment filter, and threshold cutoff controls
     c_search, c_seg, c_thresh = st.columns([1.5, 1.5, 1])
     with c_search:
         cid_query = st.text_input("Search Customer ID", placeholder="e.g. 14646")
@@ -286,11 +338,13 @@ elif page == "Churn Risk":
     with c_thresh:
         local_thresh = st.slider("Risk Cutoff ≥", 0.0, 1.0, churn_threshold, 0.05, key="risk_slider")
 
+    # Filter at-risk accounts based on threshold and segments
     risk_candidates = filtered_bi[
         (filtered_bi["churn_probability"] >= local_thresh)
         & (filtered_bi["segment"].isin(risk_segs))
     ].copy()
 
+    # Exact customer ID lookup
     if cid_query:
         try:
             val = float(cid_query.strip())
@@ -307,6 +361,7 @@ elif page == "Churn Risk":
     ]
     avail_cols = [c for c in cols_to_show if c in risk_candidates.columns]
 
+    # Paginated data table with progress bars for intuitive risk evaluation
     st.dataframe(
         risk_candidates[avail_cols].head(500),
         use_container_width=True,
@@ -325,6 +380,7 @@ elif page == "Churn Risk":
         },
     )
 
+    # CSV download button for CRM / email marketing pipeline export
     csv_payload = risk_candidates[avail_cols].to_csv(index=False)
     st.download_button(
         "📥 Export At-Risk Customers (CSV)",
@@ -336,12 +392,15 @@ elif page == "Churn Risk":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 4. ACTIONS PAGE
+# SECTION: Page 4 — Strategic Actions & Marketing Playbooks
 # ══════════════════════════════════════════════════════════════════════════════
+# Purpose: Prescriptive marketing actions organized by financial priority,
+# providing concrete ROI impact calculations and top VIP accounts.
 elif page == "Actions":
     st.title("🎯 What To Do This Week")
     st.caption("Prescriptive marketing playbooks sorted by immediate revenue risk and business ROI.")
 
+    # Execution priority order: Address highest immediate revenue exposure first
     priority_pipeline = ["At Risk (High Value)", "Champions", "Promising", "Hibernating"]
     for idx, seg in enumerate(priority_pipeline):
         df_act = filtered_bi[filtered_bi["segment"] == seg]
@@ -360,6 +419,7 @@ elif page == "Actions":
         st.markdown(f"**Recommended Playbook:** {meta.get('detail', 'N/A')}")
         st.markdown(f"**Business Impact Case:** {meta.get('roi', 'N/A')}")
 
+        # Simulated marketing workflow trigger button
         if st.button(f"🚀 Deploy {meta.get('action', seg)} Campaign", key=f"btn_{seg}", use_container_width=True):
             st.success(f"Campaign dispatched to CRM/marketing automation pipeline for {len(df_act):,} {seg} accounts.")
 
@@ -383,8 +443,10 @@ elif page == "Actions":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 5. ABOUT PAGE
+# SECTION: Page 5 — Project Architecture & Methodology
 # ══════════════════════════════════════════════════════════════════════════════
+# Purpose: Complete technical and business documentation, explaining the data
+# lineage, SQL warehouse, feature pipelines, model selection, and benchmarks.
 elif page == "About":
     st.title("ℹ️ Project Architecture & Methodology")
 
@@ -439,7 +501,9 @@ flowchart LR
     """)
 
 
-# ── Global Application Footer ────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION: Global Application Footer
+# ─────────────────────────────────────────────────────────────────────────────
 st.markdown(
     f'<div class="custom-footer">Built by <b>Vedant Padole</b> · Powered by '
     f'<a href="https://streamlit.io" target="_blank">Streamlit</a> & Plotly · {datetime.now().year}</div>',

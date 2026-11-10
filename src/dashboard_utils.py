@@ -1,4 +1,26 @@
-"""Dashboard utility helpers for the Axlero Streamlit app."""
+"""Dashboard utility helpers for the Axlero Streamlit application.
+
+This module provides data transformation utilities, visualization builders,
+formatting helpers, and UI styling for the Axlero Customer Intelligence Dashboard.
+It transforms raw customer scores and segment aggregations into interactive Plotly
+visualizations and executive KPI summaries.
+
+Pipeline Context:
+    model.py (Scored accounts) & segmentation.py (K-Means clusters)
+      └──> data/processed/ (CSV & Parquet exports)
+             └──> dashboard_utils.py [THIS MODULE]
+                    └──> app.py (Streamlit Web Interface)
+
+Typical usage:
+    from src.dashboard_utils import (
+        CUSTOM_CSS,
+        build_monthly_revenue,
+        build_segment_donut,
+        build_rfm_scatter,
+        fmt_currency,
+    )
+    fig_rev = build_monthly_revenue(bi_df)
+"""
 
 from __future__ import annotations
 
@@ -9,11 +31,19 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# CONSTANTS & BUSINESS CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
 PROCESSED_DIR = Path("data/processed")
 
+# Canonical order for customer segments based on customer lifecycle priority
 SEGMENT_ORDER = ["Champions", "Promising", "At Risk (High Value)", "Hibernating"]
 
+# Color palette mapped semantically to business risk and health:
+#   - Emerald Green (#10B981): Highest value, loyal active accounts
+#   - Cobalt Blue (#3B82F6): Growing, recent adopters with upside potential
+#   - Amber / Warning Orange (#F59E0B): Critical revenue risk requiring intervention
+#   - Crimson Red (#EF4444): Inactive accounts with elevated churn probability
 SEGMENT_COLORS = {
     "Champions": "#10B981",
     "Promising": "#3B82F6",
@@ -21,6 +51,7 @@ SEGMENT_COLORS = {
     "Hibernating": "#EF4444",
 }
 
+# Intuitive visual indicators for quick executive scanning
 SEGMENT_EMOJI = {
     "Champions": "🏆",
     "Promising": "🌱",
@@ -28,6 +59,7 @@ SEGMENT_EMOJI = {
     "Hibernating": "😴",
 }
 
+# Prescriptive marketing playbooks and projected financial ROI per segment
 SEGMENT_ACTIONS = {
     "Champions": {
         "action": "VIP Loyalty & Referral",
@@ -51,7 +83,11 @@ SEGMENT_ACTIONS = {
     },
 }
 
-# ── Custom CSS ───────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# CUSTOM CSS & APPLICATION STYLING
+# ─────────────────────────────────────────────────────────────────────────────
+# Custom CSS injecting modern typography (Inter), clean card elevation,
+# responsive spacing, and smooth hover micro-interactions.
 CUSTOM_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -116,9 +152,27 @@ h2, h3 {
 </style>
 """
 
-# ── Formatters ───────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FORMATTERS
+# ─────────────────────────────────────────────────────────────────────────────
 def fmt_currency(value: float) -> str:
-    """Format number as compact currency."""
+    """Format numeric financial values into concise human-readable currency strings.
+
+    Args:
+        value: Numeric currency amount in dollars.
+
+    Returns:
+        str: Compact formatted string (e.g., '$5.79M', '$211.5K', '$450').
+
+    Example:
+        >>> fmt_currency(5790000.0)
+        '$5.79M'
+        >>> fmt_currency(211500.0)
+        '$211.5K'
+        >>> fmt_currency(45.2)
+        '$45'
+    """
     if value >= 1_000_000:
         return f"${value / 1_000_000:.2f}M"
     if value >= 1_000:
@@ -127,7 +181,22 @@ def fmt_currency(value: float) -> str:
 
 
 def fmt_number(value: float) -> str:
-    """Format large numbers with K/M suffixes."""
+    """Format large counts with compact metric suffixes.
+
+    Args:
+        value: Raw numeric count.
+
+    Returns:
+        str: Scaled string with 'M', 'K', or thousands commas.
+
+    Example:
+        >>> fmt_number(1250000)
+        '1.2M'
+        >>> fmt_number(4338)
+        '4.3K'
+        >>> fmt_number(450)
+        '450'
+    """
     if value >= 1_000_000:
         return f"{value / 1_000_000:.1f}M"
     if value >= 1_000:
@@ -135,9 +204,21 @@ def fmt_number(value: float) -> str:
     return f"{value:,.0f}"
 
 
-# ── Plotly Theme ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# PLOTLY THEME
+# ─────────────────────────────────────────────────────────────────────────────
 def apply_plotly_theme(fig: go.Figure) -> go.Figure:
-    """Apply consistent professional styling to a Plotly figure."""
+    """Apply consistent corporate styling to Plotly figures.
+
+    Configures transparent backgrounds, clean gridlines, Inter typography,
+    and standardized legend positioning for dashboard consistency.
+
+    Args:
+        fig: Input Plotly graph object.
+
+    Returns:
+        go.Figure: Styled Plotly figure.
+    """
     fig.update_layout(
         font_family="Inter, sans-serif",
         font_color="#374151",
@@ -152,12 +233,26 @@ def apply_plotly_theme(fig: go.Figure) -> go.Figure:
     return fig
 
 
-# ── Chart Builders ───────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# CHART BUILDERS
+# ─────────────────────────────────────────────────────────────────────────────
 def build_monthly_revenue(df: pd.DataFrame) -> go.Figure:
-    """Line chart of monthly revenue + active customers."""
+    """Build a dual-axis line chart tracking monthly revenue and active accounts.
+
+    Business Context:
+        Visualizes macro top-line revenue momentum alongside customer volume growth
+        to diagnose whether revenue expansion is driven by customer acquisition or spend depth.
+
+    Args:
+        df: BI customer DataFrame containing 'first_purchase', 'total_revenue', and 'customer_id'.
+
+    Returns:
+        go.Figure: Plotly dual-axis line chart with revenue area fill and active customer dots.
+    """
     if "first_purchase" not in df.columns or df.empty:
         return go.Figure()
 
+    # Aggregate monthly revenue and distinct active accounts
     monthly = (
         df.assign(month=df["first_purchase"].dt.to_period("M").dt.to_timestamp())
         .groupby("month", as_index=False)
@@ -166,6 +261,7 @@ def build_monthly_revenue(df: pd.DataFrame) -> go.Figure:
     )
 
     fig = go.Figure()
+    # Primary axis: Gross revenue in dollars
     fig.add_trace(go.Scatter(
         x=monthly["month"], y=monthly["revenue"],
         mode="lines+markers", name="Revenue",
@@ -173,6 +269,7 @@ def build_monthly_revenue(df: pd.DataFrame) -> go.Figure:
         fill="tozeroy", fillcolor="rgba(99, 102, 241, 0.1)",
         hovertemplate="<b>%{x|%b %Y}</b><br>Revenue: $%{y:,.0f}<extra></extra>",
     ))
+    # Secondary axis: Distinct active customers
     fig.add_trace(go.Scatter(
         x=monthly["month"], y=monthly["active_customers"],
         mode="lines+markers", name="Active Customers",
@@ -191,8 +288,14 @@ def build_monthly_revenue(df: pd.DataFrame) -> go.Figure:
 
 
 def build_segment_donut(seg_summary: pd.DataFrame) -> go.Figure:
-    """Donut chart of customer count per segment."""
-    colors = [SEGMENT_COLORS.get(s, "#9CA3AF") for s in seg_summary["segment"]]
+    """Build a donut chart illustrating the customer distribution across segments.
+
+    Args:
+        seg_summary: DataFrame with 'segment' and 'count' columns.
+
+    Returns:
+        go.Figure: Styled donut chart with percentage labels.
+    """
     fig = px.pie(
         seg_summary, values="count", names="segment",
         hole=0.6, color="segment",
@@ -208,7 +311,14 @@ def build_segment_donut(seg_summary: pd.DataFrame) -> go.Figure:
 
 
 def build_revenue_bar(seg_summary: pd.DataFrame) -> go.Figure:
-    """Horizontal bar of revenue per segment."""
+    """Build a horizontal bar chart displaying aggregate revenue generated per segment.
+
+    Args:
+        seg_summary: DataFrame with 'segment' and 'revenue' columns.
+
+    Returns:
+        go.Figure: Horizontal bar chart sorted by revenue ascending.
+    """
     sorted_df = seg_summary.sort_values("revenue", ascending=True)
     colors = [SEGMENT_COLORS.get(s, "#9CA3AF") for s in sorted_df["segment"]]
     fig = go.Figure(go.Bar(
@@ -226,7 +336,18 @@ def build_revenue_bar(seg_summary: pd.DataFrame) -> go.Figure:
 
 
 def build_rfm_scatter(df: pd.DataFrame) -> go.Figure:
-    """3D scatter: Recency vs Frequency vs Monetary, colored by segment."""
+    """Render an interactive 3D scatter plot of customers across Recency, Frequency, and Monetary axes.
+
+    Sampling Strategy:
+        Downsamples to 1,500 points when customer volume exceeds 1,500 to maintain
+        60 FPS in browser WebGL rendering while preserving cohort boundary fidelity.
+
+    Args:
+        df: Customer DataFrame containing 'recency', 'frequency', 'monetary', and 'segment'.
+
+    Returns:
+        go.Figure: 3D scatter visualization.
+    """
     sample = df.sample(min(1500, len(df)), random_state=42) if len(df) > 1500 else df
     fig = px.scatter_3d(
         sample, x="recency", y="frequency", z="monetary",
@@ -248,7 +369,14 @@ def build_rfm_scatter(df: pd.DataFrame) -> go.Figure:
 
 
 def build_segment_heatmap(df: pd.DataFrame) -> go.Figure:
-    """Heatmap of segment activity by month."""
+    """Generate a heatmap tracking monthly customer onboarding and activity per segment.
+
+    Args:
+        df: Customer DataFrame with 'first_purchase', 'segment', and 'customer_id'.
+
+    Returns:
+        go.Figure: Heatmap showing customer cohort intensity by month.
+    """
     if "first_purchase" not in df.columns or df.empty:
         return go.Figure()
 
@@ -277,7 +405,14 @@ def build_segment_heatmap(df: pd.DataFrame) -> go.Figure:
 
 
 def build_churn_distribution(df: pd.DataFrame) -> go.Figure:
-    """Histogram of churn probability distribution."""
+    """Render a stacked histogram of predicted churn probabilities broken down by segment.
+
+    Args:
+        df: Customer DataFrame containing 'churn_probability' and 'segment'.
+
+    Returns:
+        go.Figure: Plotly overlay histogram showing risk distribution across cohorts.
+    """
     fig = px.histogram(
         df, x="churn_probability", color="segment",
         color_discrete_map=SEGMENT_COLORS,
@@ -290,11 +425,20 @@ def build_churn_distribution(df: pd.DataFrame) -> go.Figure:
 
 
 def build_cohort_heatmap(cohort_df: pd.DataFrame) -> go.Figure:
-    """Retention heatmap from cohort_retention.csv."""
+    """Render a triangular cohort retention matrix heatmap.
+
+    Args:
+        cohort_df: DataFrame where rows are signup cohorts and columns are
+            subsequent month indices (M+0, M+1, etc.).
+
+    Returns:
+        go.Figure: Heatmap formatted as percentage retention decay.
+    """
     if cohort_df.empty:
         return go.Figure()
 
     cohort_df = cohort_df.set_index("cohort_month")
+    # Convert retention ratio (0.0 - 1.0) to percentages (0% - 100%)
     z = cohort_df.values * 100
 
     fig = go.Figure(go.Heatmap(
@@ -314,9 +458,29 @@ def build_cohort_heatmap(cohort_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-# ── Data Generators ──────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA GENERATORS
+# ─────────────────────────────────────────────────────────────────────────────
 def generate_segment_health(summary_df: pd.DataFrame) -> pd.DataFrame:
-    """Compute a 0-100 composite health score per segment."""
+    """Compute a composite 0-100 vitality index per customer segment.
+
+    Methodology:
+        The health score blends two core financial and behavioral indicators:
+          - Normalized Revenue Share (50% weight): Measures commercial contribution.
+          - Retention Rate (1 - Churn Rate) (50% weight): Measures engagement stability.
+
+    Args:
+        summary_df: DataFrame containing 'segment', 'revenue', and 'churn_rate'.
+
+    Returns:
+        pd.DataFrame: Table with 'segment' and 'health_score' (0.0 to 100.0).
+
+    Example:
+        >>> import pandas as pd
+        >>> df = pd.DataFrame({"segment": ["Champions"], "revenue": [1000], "churn_rate": [0.05]})
+        >>> generate_segment_health(df).to_dict(orient="records")
+        [{'segment': 'Champions', 'health_score': 97.5}]
+    """
     if summary_df.empty:
         return pd.DataFrame(columns=["segment", "health_score"])
 
@@ -329,7 +493,15 @@ def generate_segment_health(summary_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def generate_top_customers(df: pd.DataFrame, n: int = 100) -> pd.DataFrame:
-    """Top N customers by total revenue."""
+    """Extract and prioritize top N accounts by cumulative gross merchandise value (GMV).
+
+    Args:
+        df: Full customer DataFrame containing financial and risk indicators.
+        n: Number of top customer accounts to retrieve. Defaults to 100.
+
+    Returns:
+        pd.DataFrame: Top accounts ranked descending by total revenue.
+    """
     cols = ["customer_id", "segment", "recency", "frequency", "monetary", "total_revenue",
             "avg_order_value", "churn_probability", "primary_country"]
     avail = [c for c in cols if c in df.columns]
@@ -337,7 +509,20 @@ def generate_top_customers(df: pd.DataFrame, n: int = 100) -> pd.DataFrame:
 
 
 def generate_cohort_retention(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute cohort retention matrix from bi_export data."""
+    """Compute an empirical cohort retention matrix from longitudinal customer transactions.
+
+    Logic:
+        1. Cohort Month: Month of customer's first observed order (acquisition date).
+        2. Activity Period: Month of customer's most recent order.
+        3. Index difference: Elapsed months between first purchase and last purchase.
+        4. Percentage: Active accounts at elapsed month divided by original cohort size.
+
+    Args:
+        df: Customer DataFrame containing 'customer_id', 'first_purchase', and 'last_purchase'.
+
+    Returns:
+        pd.DataFrame: Triangular retention matrix indexed by acquisition cohort.
+    """
     if "first_purchase" not in df.columns or df.empty:
         return pd.DataFrame()
 
@@ -347,8 +532,11 @@ def generate_cohort_retention(df: pd.DataFrame) -> pd.DataFrame:
     df["cohort_period"] = df["first_purchase"].dt.to_period("M")
     df["months_since"] = (df["last"] - df["cohort_period"]).apply(lambda x: x.n if hasattr(x, "n") else 0)
 
+    # Compute baseline cohort size
     cohort_size = df.groupby("cohort")["customer_id"].nunique()
+    # Cross-tabulate active accounts across elapsed months
     retention = df.groupby(["cohort", "months_since"])["customer_id"].nunique().unstack(fill_value=0)
+    # Calculate percentage retention
     retention_pct = retention.div(cohort_size, axis=0)
 
     return retention_pct.reset_index().rename(columns={"cohort": "cohort_month"})

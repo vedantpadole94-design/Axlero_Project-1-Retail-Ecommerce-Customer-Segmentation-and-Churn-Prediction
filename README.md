@@ -24,7 +24,7 @@ to support retention planning.
 | Metric | Target | Achieved |
 |---|---:|---:|
 | Customer retention through RFM preparation | ≥ 95% | 100.0% (4,338 of 4,338) |
-| Churn benchmark ROC-AUC | ≥ 0.75 | 0.783 (Random Forest holdout) |
+| Churn benchmark ROC-AUC | ≥ 0.75 | 0.784 (Random Forest holdout) |
 | Actionable customer segments | ≥ 4 | 4 |
 | Interactive dashboard | Required | Streamlit |
 
@@ -94,6 +94,25 @@ current terminal session:
 
 ```bash
 export DATABASE_URL="postgresql+psycopg2://localhost:5432/axlero_retail"
+```
+
+## Developer Guide & Code Style
+
+To ensure long-term maintainability, codebase readability, and consistency across engineering teams, all Python code follows strict **PEP 257** and **Google Style** docstring conventions.
+
+For full architectural standards, docstring templates, inline commenting guidelines, and testing procedures, please consult:  
+👉 **[`docs/CODE_STYLE.md`](./docs/CODE_STYLE.md)**
+
+### Verification Commands
+```bash
+# Verify core modules and pipeline imports
+python -c "from src.features import compute_rfm; print('features OK')"
+python -c "from src.model import load_and_label; print('model OK')"
+python -c "from src.dashboard_utils import CUSTOM_CSS; print('dashboard OK')"
+python -c "from src.segmentation import fit_rfm_segments; print('segmentation OK')"
+
+# Run test suite
+python -m unittest discover tests/
 ```
 
 ## Notebooks
