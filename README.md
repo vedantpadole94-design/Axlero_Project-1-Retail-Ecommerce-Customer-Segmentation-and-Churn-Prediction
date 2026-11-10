@@ -117,6 +117,10 @@ when refreshing the data. Other generated data and model files remain local.
 - `data/processed/segment_summary.csv` — segment KPIs
 - `data/processed/segment_actions.csv` — recommended marketing actions
 - `data/processed/high_risk_customers.csv` — customers with churn probability > 0.70
+- `data/processed/ltv_estimates.csv` — customer lifetime value (LTV) estimates
+- `data/processed/cohort_retention.csv` — monthly cohort retention matrix
+- `data/processed/segment_health.csv` — composite segment health index scores
+- `data/processed/top_customers.csv` — top 100 VIP accounts by spend
 - `models/churn_model.joblib` — selected model and feature metadata
 - `reports/figures/` — EDA, clustering, and model diagnostic figures
 - [`reports/model_metrics.md`](./reports/model_metrics.md) — evaluation results
@@ -124,8 +128,20 @@ when refreshing the data. Other generated data and model files remain local.
 
 ## Dashboard preview
 
-> Screenshot placeholder: capture the Streamlit dashboard after launch and
-> add the image here when available.
+Experience the live interactive BI application deployed on Streamlit Cloud:  
+👉 **[Live App: axlero-churn1.streamlit.app](https://axlero-churn1.streamlit.app)**
+
+### 1. Executive KPI Cards & Dynamic Metrics
+![Executive KPI Cards](./reports/figures/dashboard_kpi_cards.png)
+
+### 2. Behavioral Segment Distribution & Revenue Contribution
+![Segment Distribution and Revenue](./reports/figures/dashboard_segments.png)
+
+### 3. Predictive Churn Risk Prioritization & Directory
+![Churn Risk Directory](./reports/figures/dashboard_churn_risk.png)
+
+### 4. Prescriptive Weekly Marketing Playbooks & ROI Impact
+![Weekly Action Playbooks](./reports/figures/dashboard_actions.png)
 
 ## Author
 

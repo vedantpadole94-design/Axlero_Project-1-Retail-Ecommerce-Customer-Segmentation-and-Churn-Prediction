@@ -12,5 +12,5 @@ yellowbrick
 pyarrow
 openpyxl
 streamlit
-streamlit
 plotly
+shap
