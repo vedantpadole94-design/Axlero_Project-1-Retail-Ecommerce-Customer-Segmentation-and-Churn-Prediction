@@ -13,3 +13,4 @@ pyarrow
 openpyxl
 streamlit
 plotly
+shap==0.54.1
