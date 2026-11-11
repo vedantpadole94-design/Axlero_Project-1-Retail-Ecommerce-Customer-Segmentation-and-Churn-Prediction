@@ -8,6 +8,8 @@ data/raw/*
 data/interim/*
 !data/raw/.gitkeep
 !data/interim/.gitkeep
+!data/interim/users_raw.parquet
+!data/interim/rfm.parquet
 !data/processed/.gitkeep
 data/processed/*.parquet
 data/processed/*.csv
